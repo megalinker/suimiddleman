@@ -22,6 +22,7 @@ const env: Env = {
     IAO_REGISTRY_ID: process.env.IAO_REGISTRY_ID!,
     POOLS_CONFIG_ID: process.env.POOLS_CONFIG_ID!,
     POOLS_REGISTRY_ID: process.env.POOLS_REGISTRY_ID!,
+    POOLS_PACKAGE_ID: process.env.POOLS_PACKAGE_ID,
     CLOCK_ID: process.env.CLOCK_ID!,
     FACTORY_PACKAGE_ID: process.env.FACTORY_PACKAGE_ID!,
     PORT: process.env.PORT ?? '3000',
@@ -45,6 +46,19 @@ const suiBlockchainService = new SuiBlockchainService(env);
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'SUI Blockchain Service is running' });
+});
+
+// Read-only: get marginal price from bonding curve for a given idol coin type
+// Usage: GET /marginal-price?coinType=<PACKAGE::module::STRUCT>
+app.get('/marginal-price', async (req, res) => {
+    try {
+        const coinType = (req.query.coinType as string) || '';
+        if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
+        const { rawReturn } = await suiBlockchainService.getMarginalPriceForIdol(coinType);
+        res.status(200).json({ coinType, rawReturn });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message || String(e) });
+    }
 });
 
 // Endpoint to launch an IDOL on-chain

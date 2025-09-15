@@ -42,6 +42,11 @@ export class SuiBlockchainService {
     private poolsRegistryId: string;
     private clockId: string;
     private factoryPackageId: string;
+    // Optional bonding-curve query wiring
+    private poolsPackageId?: string;
+    private bcModule?: string;
+    private bcGlobalConfigId?: string;
+    private quoteCoinType?: string;
 
     constructor(env: Env) {
         this.client = new SuiClient({ url: getFullnodeUrl(env.SUI_NETWORK) });
@@ -85,6 +90,11 @@ export class SuiBlockchainService {
         this.poolsRegistryId = env.POOLS_REGISTRY_ID;
         this.clockId = env.CLOCK_ID;
         this.factoryPackageId = env.FACTORY_PACKAGE_ID;
+        // Optional bonding-curve config
+        this.poolsPackageId = env.POOLS_PACKAGE_ID;
+        this.bcModule = env.BONDING_CURVE_MODULE || 'bonding_curve';
+        this.bcGlobalConfigId = env.BONDING_CURVE_GLOBAL_CONFIG_ID;
+        this.quoteCoinType = env.COINX_TYPE || '0x2::sui::SUI';
     }
 
     private async ensureSuiAvailable() {
@@ -342,6 +352,36 @@ export class SuiBlockchainService {
             creatorTokensId:
                 creatorTokens && 'objectId' in (creatorTokens as any) ? (creatorTokens as any).objectId : undefined,
         };
+    }
+
+    /**
+     * Read-only price query using bonding_curve::get_marginal_price<CoinX, CoinY>(config: &GlobalConfig): u64
+     * - CoinX defaults to SUI unless overridden via env COINX_TYPE
+     * - CoinY is the provided idolCoinType (e.g., `${pkg}::${mod}::${STRUCT}`)
+     * - config object is BONDING_CURVE_GLOBAL_CONFIG_ID
+     */
+    async getMarginalPriceForIdol(idolCoinType: string): Promise<{  rawReturn?: any }>
+    {
+        const pkg = this.poolsPackageId; // fallback to factory pkg if not specified
+        if (!pkg) throw new Error('No package ID configured for get_marginal_price');
+
+
+        const tx = new Transaction();
+        tx.moveCall({
+            target: `${pkg}::${this.bcModule}::get_marginal_price`,
+            typeArguments: [this.quoteCoinType!, idolCoinType],
+            arguments: [tx.object(this.poolsConfigId)],
+        });
+
+        const sender = this.keypair.getPublicKey().toSuiAddress();
+        const di = await this.client.devInspectTransactionBlock({ sender, transactionBlock: tx });
+
+        const rawReturn = (di as any)?.results?.[0]?.returnValues;
+        if (!rawReturn || !rawReturn.length) {
+            const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
+            throw new Error(`No return value from get_marginal_price. ${err ? 'DevInspect error: ' + err : ''}`);
+        }
+        return { rawReturn };
     }
 
     // --------- Templates ---------

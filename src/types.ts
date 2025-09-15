@@ -11,6 +11,11 @@ export interface Env {
     FACTORY_PACKAGE_ID: string; // The ID of your deployed idol_factory package
     PORT: string;
     SUI_NETWORK: SuiNetwork;
+    // Optional: bonding curve query wiring
+    POOLS_PACKAGE_ID?: string; // package that contains bonding_curve::get_marginal_price
+    BONDING_CURVE_MODULE?: string; // defaults to "bonding_curve"
+    BONDING_CURVE_GLOBAL_CONFIG_ID?: string; // GlobalConfig object passed to get_marginal_price
+    COINX_TYPE?: string; // Quote coin type for price, defaults to 0x2::sui::SUI
 }
 
 export interface IdolCreateRequest {
