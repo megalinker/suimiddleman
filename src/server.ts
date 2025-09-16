@@ -23,6 +23,9 @@ const env: Env = {
     POOLS_CONFIG_ID: process.env.POOLS_CONFIG_ID!,
     POOLS_REGISTRY_ID: process.env.POOLS_REGISTRY_ID!,
     POOLS_PACKAGE_ID: process.env.POOLS_PACKAGE_ID,
+    BONDING_CURVE_MODULE: process.env.BONDING_CURVE_MODULE,
+    BONDING_CURVE_GLOBAL_CONFIG_ID: process.env.BONDING_CURVE_GLOBAL_CONFIG_ID,
+    COINX_TYPE: process.env.COINX_TYPE,
     CLOCK_ID: process.env.CLOCK_ID!,
     FACTORY_PACKAGE_ID: process.env.FACTORY_PACKAGE_ID!,
     PORT: process.env.PORT ?? '3000',
@@ -55,6 +58,19 @@ app.get('/marginal-price', async (req, res) => {
         const coinType = (req.query.coinType as string) || '';
         if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
         const { rawReturn } = await suiBlockchainService.getMarginalPriceForIdol(coinType);
+        res.status(200).json({ coinType, rawReturn });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message || String(e) });
+    }
+});
+
+// Read-only: get current supply from bonding curve for a given idol coin type
+// Usage: GET /current-supply?coinType=<PACKAGE::module::STRUCT>
+app.get('/current-supply', async (req, res) => {
+    try {
+        const coinType = (req.query.coinType as string) || '';
+        if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
+        const { rawReturn } = await suiBlockchainService.getCurrentSupplyForIdol(coinType);
         res.status(200).json({ coinType, rawReturn });
     } catch (e: any) {
         res.status(500).json({ error: e.message || String(e) });

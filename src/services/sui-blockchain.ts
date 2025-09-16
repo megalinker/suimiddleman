@@ -360,17 +360,18 @@ export class SuiBlockchainService {
      * - CoinY is the provided idolCoinType (e.g., `${pkg}::${mod}::${STRUCT}`)
      * - config object is BONDING_CURVE_GLOBAL_CONFIG_ID
      */
-    async getMarginalPriceForIdol(idolCoinType: string): Promise<{  rawReturn?: any }>
-    {
+    async getMarginalPriceForIdol(idolCoinType: string): Promise<{ rawReturn?: any }> {
         const pkg = this.poolsPackageId; // fallback to factory pkg if not specified
         if (!pkg) throw new Error('No package ID configured for get_marginal_price');
 
+        // Prefer explicit bonding-curve global config if provided; fallback to pools config
+        const configId = this.bcGlobalConfigId ?? this.poolsConfigId;
 
         const tx = new Transaction();
         tx.moveCall({
             target: `${pkg}::${this.bcModule}::get_marginal_price`,
             typeArguments: [this.quoteCoinType!, idolCoinType],
-            arguments: [tx.object(this.poolsConfigId)],
+            arguments: [tx.object(configId)],
         });
 
         const sender = this.keypair.getPublicKey().toSuiAddress();
@@ -380,6 +381,37 @@ export class SuiBlockchainService {
         if (!rawReturn || !rawReturn.length) {
             const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
             throw new Error(`No return value from get_marginal_price. ${err ? 'DevInspect error: ' + err : ''}`);
+        }
+        return { rawReturn };
+    }
+
+    /**
+     * Read-only supply query using bonding_curve::get_current_supply<CoinX, CoinY>(config: &GlobalConfig): vector<u64> | u64
+     * - CoinX defaults to SUI unless overridden via env COINX_TYPE
+     * - CoinY is the provided idolCoinType (e.g., `${pkg}::${mod}::${STRUCT}`)
+     * - config object prefers BONDING_CURVE_GLOBAL_CONFIG_ID, falls back to POOLS_CONFIG_ID
+     * Returns the raw dev-inspect returnValues array so the caller can decode as needed.
+     */
+    async getCurrentSupplyForIdol(idolCoinType: string): Promise<{ rawReturn?: any }> {
+        const pkg = this.poolsPackageId; // fallback to factory pkg if not specified
+        if (!pkg) throw new Error('No package ID configured for get_current_supply');
+
+        const configId = this.bcGlobalConfigId ?? this.poolsConfigId;
+
+        const tx = new Transaction();
+        tx.moveCall({
+            target: `${pkg}::${this.bcModule}::get_current_supply`,
+            typeArguments: [this.quoteCoinType!, idolCoinType],
+            arguments: [tx.object(configId)],
+        });
+
+        const sender = this.keypair.getPublicKey().toSuiAddress();
+        const di = await this.client.devInspectTransactionBlock({ sender, transactionBlock: tx });
+
+        const rawReturn = (di as any)?.results?.[0]?.returnValues;
+        if (!rawReturn || !rawReturn.length) {
+            const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
+            throw new Error(`No return value from get_current_supply. ${err ? 'DevInspect error: ' + err : ''}`);
         }
         return { rawReturn };
     }
