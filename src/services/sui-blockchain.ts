@@ -42,6 +42,7 @@ export class SuiBlockchainService {
     private poolsRegistryId: string;
     private clockId: string;
     private factoryPackageId: string;
+    private adminCapId: string; // ADDED
     // Optional bonding-curve query wiring
     private poolsPackageId?: string;
     private bcModule?: string;
@@ -74,13 +75,15 @@ export class SuiBlockchainService {
 
         this.keypair = Ed25519Keypair.fromSecretKey(secret32);
 
+        // CORRECTED: Use `env.ADMIN_CAP_ID` instead of `process.env.ADMIN_CAP_ID`
         if (
             !env.IAO_CONFIG_ID ||
             !env.IAO_REGISTRY_ID ||
             !env.POOLS_CONFIG_ID ||
             !env.POOLS_REGISTRY_ID ||
             !env.CLOCK_ID ||
-            !env.FACTORY_PACKAGE_ID
+            !env.FACTORY_PACKAGE_ID ||
+            !env.ADMIN_CAP_ID
         ) {
             throw new Error('Missing one or more IAO/Pools/Factory object IDs in environment variables.');
         }
@@ -90,6 +93,7 @@ export class SuiBlockchainService {
         this.poolsRegistryId = env.POOLS_REGISTRY_ID;
         this.clockId = env.CLOCK_ID;
         this.factoryPackageId = env.FACTORY_PACKAGE_ID;
+        this.adminCapId = env.ADMIN_CAP_ID; // ADDED
         // Optional bonding-curve config
         this.poolsPackageId = env.POOLS_PACKAGE_ID;
         this.bcModule = env.BONDING_CURVE_MODULE || 'bonding_curve';
@@ -275,7 +279,6 @@ export class SuiBlockchainService {
         await this.assertObjectExists(this.clockId, 'CLOCK_ID');
 
         const tx = new Transaction();
-
         // Build the PTB
         const [initial_liquidity] = tx.splitCoins(tx.gas, [tx.pure.u64(1_000_000_000)]);
         const fullCoinType = idolToken.coinType;
@@ -449,9 +452,12 @@ export class SuiBlockchainService {
         // Build the transaction with direct object IDs provided by the client
         const tx = new Transaction();
         tx.moveCall({
-            target: `${this.poolsPackageId}::registry::graduate`,
+            // MODIFIED: Calling graduate_admin, which requires an AdminCap
+            target: `${this.poolsPackageId}::registry::graduate_admin`,
             typeArguments: [quoteCoinType, idolCoinType],
             arguments: [
+                // MODIFIED: Adding the AdminCap object as the first argument
+                tx.object(this.adminCapId), 
                 tx.object(this.poolsRegistryId),
                 tx.pure.id(bondingCurveId),
                 tx.pure.id(poolId),

@@ -16,6 +16,7 @@ export interface Env {
     BONDING_CURVE_MODULE?: string; // defaults to "bonding_curve"
     BONDING_CURVE_GLOBAL_CONFIG_ID?: string; // GlobalConfig object passed to get_marginal_price
     COINX_TYPE?: string; // Quote coin type for price, defaults to 0x2::sui::SUI
+    ADMIN_CAP_ID: string; // CORRECTED: Changed from optional to required.
 }
 
 export interface IdolCreateRequest {

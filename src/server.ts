@@ -30,12 +30,14 @@ const env: Env = {
     FACTORY_PACKAGE_ID: process.env.FACTORY_PACKAGE_ID!,
     PORT: process.env.PORT ?? '3000',
     SUI_NETWORK: parseNetwork(process.env.SUI_NETWORK),
+    ADMIN_CAP_ID: process.env.ADMIN_CAP_ID!,
 };
 
-// Validate required environment variables
+// Corrected: Validate required environment variables
 const requiredEnv = [
     'SUI_SIGNER_SECRET_KEY', 'IAO_CONFIG_ID', 'IAO_REGISTRY_ID',
-    'POOLS_CONFIG_ID', 'POOLS_REGISTRY_ID', 'CLOCK_ID', 'FACTORY_PACKAGE_ID'
+    'POOLS_CONFIG_ID', 'POOLS_REGISTRY_ID', 'CLOCK_ID', 'FACTORY_PACKAGE_ID',
+    'ADMIN_CAP_ID' // ADDED to the required list
 ];
 for (const key of requiredEnv) {
     if (!env[key as keyof Env]) {
