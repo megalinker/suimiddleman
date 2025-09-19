@@ -265,7 +265,7 @@ export class SuiBlockchainService {
             coinType: string;
         },
         createParams: IdolCreateRequest,
-    ): Promise<{ digest: string; poolId: string; lpCapId?: string; creatorTokensId?: string }> {
+    ): Promise<{ digest: string; poolId: string; lpCapId?: string; creatorTokensId?: string; bondingCurveId: string }> {
         // Preflight: objects must exist on this network
         await this.assertObjectExists(idolToken.treasuryCapId, 'TreasuryCap');
         await this.assertObjectExists(this.iaoConfigId, 'IAO_CONFIG_ID');
@@ -339,15 +339,24 @@ export class SuiBlockchainService {
         const lpCap = createdObjects?.find((o) => o.objectType.includes('::iao::LPCap'));
         const creatorTokens = createdObjects?.find((o) => o.objectType.includes('::coin::Coin'));
         const poolObject = createdObjects?.find((o) => o.objectType.includes('::iao::IAO'));
+        const bondingCurveObject = createdObjects?.find((o) => o.objectType.includes('::bonding_curve::BondingCurve'));
+
 
         if (!poolObject || !('objectId' in poolObject)) {
             console.error('[SUI Service] Failed to find Pool object in transaction results:', result);
             throw new Error('Failed to find Pool object after asset registration.');
         }
 
+        if (!bondingCurveObject || !('objectId' in bondingCurveObject)) {
+             console.error('[SUI Service] Failed to find Bonding Curve object in transaction results:', result);
+             throw new Error('Failed to find Bonding Curve object after asset registration.');
+        }
+
+
         return {
             digest: result.digest,
             poolId: (poolObject as any).objectId,
+            bondingCurveId: (bondingCurveObject as any).objectId,
             lpCapId: lpCap && 'objectId' in (lpCap as any) ? (lpCap as any).objectId : undefined,
             creatorTokensId:
                 creatorTokens && 'objectId' in (creatorTokens as any) ? (creatorTokens as any).objectId : undefined,
@@ -414,6 +423,61 @@ export class SuiBlockchainService {
             throw new Error(`No return value from get_current_supply. ${err ? 'DevInspect error: ' + err : ''}`);
         }
         return { rawReturn };
+    }
+
+    /**
+     * A method to call the `graduate` function on-chain.
+     * This will transition an IAO pool to a regular bonding curve pool.
+     */
+    async graduateIdolPool(
+        idolCoinType: string,
+        bondingCurveId: string,
+        poolId: string,
+        quoteCoinType: string = this.quoteCoinType!,
+    ): Promise<{ digest: string }> {
+        // Preflight checks
+        if (!this.poolsPackageId) {
+            throw new Error('POOLS_PACKAGE_ID is not configured.');
+        }
+        if (!this.poolsRegistryId) {
+            throw new Error('POOLS_REGISTRY_ID is not configured.');
+        }
+        if (!this.clockId) {
+            throw new Error('CLOCK_ID is not configured.');
+        }
+
+        // Build the transaction with direct object IDs provided by the client
+        const tx = new Transaction();
+        tx.moveCall({
+            target: `${this.poolsPackageId}::registry::graduate`,
+            typeArguments: [quoteCoinType, idolCoinType],
+            arguments: [
+                tx.object(this.poolsRegistryId),
+                tx.pure.id(bondingCurveId),
+                tx.pure.id(poolId),
+                tx.object(this.clockId)
+            ],
+        });
+
+        // The gas budget might need to be higher for this operation.
+        tx.setGasBudget(100_000_000n);
+
+        // Execute for real
+        const result = await this.client.signAndExecuteTransaction({
+            signer: this.keypair,
+            transaction: tx,
+            requestType: 'WaitForLocalExecution',
+            options: { showEffects: true, showObjectChanges: true },
+        });
+
+        await this.client.waitForTransaction({
+            digest: result.digest,
+            options: { showEffects: true, showObjectChanges: true },
+        });
+
+        return {
+            digest: result.digest,
+        };
     }
 
     // --------- Templates ---------

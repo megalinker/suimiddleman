@@ -126,6 +126,7 @@ app.post('/launch-idol', async (req, res) => {
             structName: tokenPackageResult.structName,
             coinType: tokenPackageResult.coinType,
             poolId: registerAssetResult.poolId,
+            bondingCurveId: registerAssetResult.bondingCurveId, // Added bondingCurveId to the response
             digest: registerAssetResult.digest,
             lpCapId: registerAssetResult.lpCapId,
             creatorTokensId: registerAssetResult.creatorTokensId,
@@ -140,6 +141,41 @@ app.post('/launch-idol', async (req, res) => {
         });
     }
 });
+
+// New API endpoint to graduate an idol pool
+app.post('/graduate-idol', async (req, res) => {
+    // These IDs must be provided by the client
+    const { idolCoinType, bondingCurveId, poolId, quoteCoinType } = req.body;
+
+    if (!idolCoinType || !bondingCurveId || !poolId) {
+        return res.status(400).json({ error: 'Missing idolCoinType, bondingCurveId, or poolId in request body.' });
+    }
+
+    console.log("======================================================");
+    console.log(`[DO Droplet] Received request to graduate idol pool with coin type: ${idolCoinType}`);
+    console.log(`[DO Droplet] Bonding Curve ID: ${bondingCurveId}, Pool ID: ${poolId}`);
+    console.log("------------------------------------------------------");
+
+    try {
+        const result = await suiBlockchainService.graduateIdolPool(idolCoinType, bondingCurveId, poolId, quoteCoinType);
+        
+        console.log(`[DO Droplet] SUCCESS: Idol pool graduated. Transaction digest: ${result.digest}`);
+        console.log("======================================================");
+        
+        res.status(200).json({
+            message: 'Idol pool successfully graduated.',
+            digest: result.digest,
+        });
+    } catch (error: any) {
+        console.error(`[DO Droplet] FATAL ERROR graduating idol pool:`, error);
+        console.log("======================================================");
+        res.status(500).json({
+            error: 'Failed to graduate idol pool on SUI blockchain',
+            details: error.message,
+        });
+    }
+});
+
 
 const port = Number(env.PORT ?? '3000');
 
