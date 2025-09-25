@@ -144,7 +144,7 @@ app.post('/launch-idol', async (req, res) => {
     }
 });
 
-// New API endpoint to graduate an idol pool
+// API endpoint to graduate an idol pool
 app.post('/graduate-idol', async (req, res) => {
     // These IDs must be provided by the client
     const { idolCoinType, bondingCurveId, poolId, quoteCoinType } = req.body;
@@ -173,6 +173,40 @@ app.post('/graduate-idol', async (req, res) => {
         console.log("======================================================");
         res.status(500).json({
             error: 'Failed to graduate idol pool on SUI blockchain',
+            details: error.message,
+        });
+    }
+});
+
+// API endpoint to call check_and_update_level
+app.post('/check-update-level', async (req, res) => {
+    const { idolCoinType } = req.body;
+
+    if (!idolCoinType) {
+        return res.status(400).json({ error: 'Missing idolCoinType in request body.' });
+    }
+
+    console.log("======================================================");
+    console.log(`[DO Droplet] Received request to check and update level for idol: ${idolCoinType}`);
+    console.log("------------------------------------------------------");
+
+    try {
+        const result = await suiBlockchainService.checkAndUpdateLevel(idolCoinType);
+        
+        console.log(`[DO Droplet] SUCCESS: check_and_update_level executed. Transaction digest: ${result.digest}`);
+        console.log("======================================================");
+        
+        // 🔥 MODIFICATION: Return the digest AND the events array
+        res.status(200).json({
+            message: 'Successfully executed check_and_update_level.',
+            digest: result.digest,
+            events: result.events, // <--- ADDED EVENTS HERE
+        });
+    } catch (error: any) {
+        console.error(`[DO Droplet] FATAL ERROR during check_and_update_level:`, error);
+        console.log("======================================================");
+        res.status(500).json({
+            error: 'Failed to execute check_and_update_level on SUI blockchain',
             details: error.message,
         });
     }

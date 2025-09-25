@@ -1,11 +1,12 @@
-//--- File: services/sui-blockchain.ts ---
+//--- File: services/sui-blockchain.ts (Final Fixed) ---
 
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 import { fromB64 } from '@mysten/sui/utils';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Env, IdolCreateRequest } from '../types';
+// IMPORT FIXED: CheckUpdateLevelResult is imported from the shared types file.
+import { Env, IdolCreateRequest, CheckUpdateLevelResult } from '../types'; 
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -42,7 +43,7 @@ export class SuiBlockchainService {
     private poolsRegistryId: string;
     private clockId: string;
     private factoryPackageId: string;
-    private adminCapId: string; // ADDED
+    private adminCapId: string;
     // Optional bonding-curve query wiring
     private poolsPackageId?: string;
     private bcModule?: string;
@@ -75,7 +76,7 @@ export class SuiBlockchainService {
 
         this.keypair = Ed25519Keypair.fromSecretKey(secret32);
 
-        // CORRECTED: Use `env.ADMIN_CAP_ID` instead of `process.env.ADMIN_CAP_ID`
+        // Uses required `env.ADMIN_CAP_ID` from the imported Env type
         if (
             !env.IAO_CONFIG_ID ||
             !env.IAO_REGISTRY_ID ||
@@ -457,7 +458,7 @@ export class SuiBlockchainService {
             typeArguments: [quoteCoinType, idolCoinType],
             arguments: [
                 // MODIFIED: Adding the AdminCap object as the first argument
-                tx.object(this.adminCapId), 
+                tx.object(this.adminCapId),
                 tx.object(this.poolsRegistryId),
                 tx.pure.id(bondingCurveId),
                 tx.pure.id(poolId),
@@ -486,6 +487,67 @@ export class SuiBlockchainService {
         };
     }
 
+    /**
+     * Calls the `check_and_update_level` function on-chain.
+     * This transaction verifies that the global and coin-specific configurations are not paused
+     * and may update the bonding curve's level based on the current time.
+     * It uses the service's configured `quoteCoinType` as CoinX.
+     * @param idolCoinType - The type of the idol coin to check (CoinY).
+     * @returns A promise that resolves with the transaction digest AND the emitted events.
+     */
+    async checkAndUpdateLevel(
+        idolCoinType: string,
+    ): Promise<CheckUpdateLevelResult> { // <-- Uses imported CheckUpdateLevelResult
+        const pkg = this.poolsPackageId;
+        if (!pkg) {
+            throw new Error('POOLS_PACKAGE_ID is not configured for this operation.');
+        }
+
+        const configId = this.bcGlobalConfigId ?? this.poolsConfigId;
+        if (!configId) {
+            throw new Error('A global config ID (BONDING_CURVE_GLOBAL_CONFIG_ID or POOLS_CONFIG_ID) is not configured.');
+        }
+
+        if (!this.clockId) {
+            throw new Error('CLOCK_ID is not configured.');
+        }
+
+        const tx = new Transaction();
+        tx.moveCall({
+            target: `${pkg}::${this.bcModule}::check_and_update_level`,
+            typeArguments: [this.quoteCoinType!, idolCoinType],
+            arguments: [
+                tx.object(configId),
+                tx.object(this.clockId)
+            ],
+        });
+
+        tx.setGasBudget(100_000_000n);
+
+        // 1. Sign and execute (requests effects)
+        const result = await this.client.signAndExecuteTransaction({
+            signer: this.keypair,
+            transaction: tx,
+            requestType: 'WaitForLocalExecution',
+            options: { showEffects: true }, // Crucial for effects/events
+        });
+
+        // 2. Wait for confirmation and fetch the full result
+        const finalResult = await this.client.waitForTransaction({
+            digest: result.digest,
+            options: { showEffects: true, showEvents: true }, // Ensure events are explicitly included
+        });
+        
+        // 3. Extract and return events
+    // Events are returned at the top level when showEvents: true, not under effects
+    const events = (finalResult as any).events ?? [];
+
+        return {
+            digest: finalResult.digest,
+            events: events, // <-- RETURN THE EVENTS
+        };
+    }
+
     // --------- Templates ---------
 
     private getMoveTomlTemplate(moduleName: string): string {
@@ -494,7 +556,6 @@ export class SuiBlockchainService {
 [package]
 name = "${moduleName}"
 version = "0.0.1"
-
 [addresses]
 ${moduleName} = "0x0"
 `.trim();
@@ -519,10 +580,8 @@ module ${moduleName}::${moduleName} {
     use sui::transfer;
     use sui::url;
     use sui::tx_context::{Self, TxContext};
-
     // One-Time Witness type (UPPERCASE module name)
     struct ${MODULE_NAME_UPPER} has drop {}
-
     // Called once at publish-time; Sui provides the OTW automatically
     fun init(witness: ${MODULE_NAME_UPPER}, ctx: &mut TxContext) {
         let (treasury_cap, metadata) = coin::create_currency<${MODULE_NAME_UPPER}>(
@@ -534,10 +593,8 @@ module ${moduleName}::${moduleName} {
             option::some(url::new_unsafe_from_bytes(b"${params.imageUrl}")),
             ctx
         );
-
         // Give deployer the TreasuryCap so they control mint/burn
         transfer::public_transfer(treasury_cap, tx_context::sender(ctx));
-
         // Freeze metadata so it's immutable/readable globally (must use the public variant)
         transfer::public_freeze_object(metadata);
     }
