@@ -43,3 +43,18 @@ export type CheckUpdateLevelResult = {
     digest: string;
     events: any[];
 };
+
+export interface TradeEventData {
+    is_buy: boolean;
+    coin_x_type: string;
+    coin_y_type: string;
+    x_amount: string;
+    y_amount: string;
+    fee_amount: string;
+    liquidity_reserve: string;
+    curve_tokens: string;
+    supply: string;
+    trader: string;
+    bonding_curve_id: string;
+    price: string;
+}

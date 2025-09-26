@@ -6,7 +6,7 @@ import { Transaction } from '@mysten/sui/transactions';
 import { fromB64 } from '@mysten/sui/utils';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 // IMPORT FIXED: CheckUpdateLevelResult is imported from the shared types file.
-import { Env, IdolCreateRequest, CheckUpdateLevelResult } from '../types'; 
+import { Env, IdolCreateRequest, CheckUpdateLevelResult, TradeEventData } from '../types'; 
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -49,7 +49,7 @@ export class SuiBlockchainService {
     private bcModule?: string;
     private bcGlobalConfigId?: string;
     private quoteCoinType?: string;
-
+    private static readonly SUI_DECIMALS_FACTOR = 1_000_000_000;
     constructor(env: Env) {
         this.client = new SuiClient({ url: getFullnodeUrl(env.SUI_NETWORK) });
 
@@ -368,6 +368,94 @@ export class SuiBlockchainService {
     }
 
     /**
+     * Fetches trade events from the blockchain.
+     * @param bondingCurveId - Optional ID to filter events for a specific bonding curve.
+     * @param limit - The maximum number of events to fetch.
+     * @returns A promise that resolves to an array of trade events.
+     */
+    async getTradeEvents(bondingCurveId?: string, limit: number = 100) {
+        if (!this.poolsPackageId) {
+            throw new Error('POOLS_PACKAGE_ID is not configured for fetching trade events.');
+        }
+        const EVENT_TYPE = `${this.poolsPackageId}::${this.bcModule}::TradeEvent`;
+
+        try {
+            const events = await this.client.queryEvents({
+                query: {
+                    MoveEventType: EVENT_TYPE
+                },
+                limit: limit,
+                order: 'descending'
+            });
+
+            // Filter by specific bonding curve if provided
+            const filteredEvents = bondingCurveId 
+                ? events.data.filter(event => {
+                    const data = event.parsedJson as TradeEventData;
+                    return data.bonding_curve_id === bondingCurveId;
+                  })
+                : events.data;
+
+            return filteredEvents;
+        } catch (error) {
+            console.error('Error fetching events:', error);
+            return [];
+        }
+    }
+
+/**
+     * Calculates trading volume from a list of events.
+     * @param events - An array of trade events.
+     * @returns An object containing total, buy, and sell volumes (in SUI), and the transaction count.
+     */
+    calculateVolume(events: any[]): {
+        totalVolume: number;
+        buyVolume: number;
+        sellVolume: number;
+        transactionCount: number;
+    } {
+        let totalVolume = 0;
+        let buyVolume = 0;
+        let sellVolume = 0;
+        let transactionCount = events.length;
+
+        // Use the SUI decimal factor to convert MIST (raw amount) to SUI.
+        const decimalsFactor = SuiBlockchainService.SUI_DECIMALS_FACTOR;
+
+        events.forEach(event => {
+            const data = event.parsedJson as TradeEventData;
+            console.log(`[Volume Calculation] Processing event: is_buy=${data.is_buy}, x_amount=${data.x_amount}, y_amount=${data.y_amount}`);
+            
+            // 1. Get the raw volume as a number (it might exceed JS's safe integer limit, 
+            // but for typical trading volume sums, this is often acceptable if the number of trades isn't huge).
+            // For maximum safety, convert to BigInt first, then to a safe float.
+            const rawAmountBigInt = BigInt(data.x_amount);
+            
+            // 2. Calculate the human-readable volume (in SUI)
+            // Note: Volume is consistently measured by CoinX/Quote Coin (x_amount)
+            const humanVolume = Number(rawAmountBigInt) / decimalsFactor;
+
+            if (data.is_buy) {
+                // Buy transaction: user spent x_amount (SUI/base token)
+                buyVolume += humanVolume;
+                totalVolume += humanVolume;
+            } else {
+                // Sell transaction: user received x_amount (SUI/base token)
+                sellVolume += humanVolume;
+                totalVolume += humanVolume;
+            }
+        });
+
+        // Round results to a reasonable precision (e.g., 6 decimal places)
+        return {
+            totalVolume: Math.round(totalVolume * 1_000_000) / 1_000_000,
+            buyVolume: Math.round(buyVolume * 1_000_000) / 1_000_000,
+            sellVolume: Math.round(sellVolume * 1_000_000) / 1_000_000,
+            transactionCount
+        };
+    }
+
+    /**
      * Read-only price query using bonding_curve::get_marginal_price<CoinX, CoinY>(config: &GlobalConfig): u64
      * - CoinX defaults to SUI unless overridden via env COINX_TYPE
      * - CoinY is the provided idolCoinType (e.g., `${pkg}::${mod}::${STRUCT}`)
@@ -600,5 +688,44 @@ module ${moduleName}::${moduleName} {
     }
 }
 `.trim();
+    }
+
+    /**
+     * Calculates holder balances from a list of trade events.
+     * @param events - An array of trade events.
+     * @returns A map of trader addresses to their net token balances.
+     */
+    calculateHolders(events: any[]): { [trader: string]: number } {
+        const balances: { [trader: string]: number } = {};
+
+        // Process events in chronological order (oldest first) to correctly calculate balances
+        const reversedEvents = [...events].reverse();
+
+        reversedEvents.forEach(event => {
+            const data = event.parsedJson as TradeEventData;
+            const trader = data.trader;
+            
+            if (!balances[trader]) {
+                balances[trader] = 0;
+            }
+
+            if (data.is_buy) {
+                // User buys the token, balance increases by y_amount
+                balances[trader] += parseInt(data.y_amount);
+            } else {
+                // User sells the token, balance decreases by y_amount
+                balances[trader] -= parseInt(data.y_amount);
+            }
+        });
+
+        // Filter out traders with a zero or negative balance
+        const holders: { [trader: string]: number } = {};
+        for (const trader in balances) {
+            if (balances[trader] > 0) {
+                holders[trader] = balances[trader];
+            }
+        }
+
+        return holders;
     }
 }
