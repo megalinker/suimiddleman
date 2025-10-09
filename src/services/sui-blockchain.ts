@@ -84,7 +84,7 @@ export class SuiBlockchainService {
             !env.POOLS_REGISTRY_ID ||
             !env.CLOCK_ID ||
             !env.FACTORY_PACKAGE_ID ||
-            !env.ADMIN_CAP_ID
+            !env.IAO_ADMIN_CAP_ID
         ) {
             throw new Error('Missing one or more IAO/Pools/Factory object IDs in environment variables.');
         }
@@ -94,7 +94,7 @@ export class SuiBlockchainService {
         this.poolsRegistryId = env.POOLS_REGISTRY_ID;
         this.clockId = env.CLOCK_ID;
         this.factoryPackageId = env.FACTORY_PACKAGE_ID;
-        this.adminCapId = env.ADMIN_CAP_ID; // ADDED
+        this.adminCapId = env.IAO_ADMIN_CAP_ID; // ADDED
         // Optional bonding-curve config
         this.poolsPackageId = env.POOLS_PACKAGE_ID;
         this.bcModule = env.BONDING_CURVE_MODULE || 'bonding_curve';
