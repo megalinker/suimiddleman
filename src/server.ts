@@ -3,12 +3,12 @@ import cors from 'cors';
 import { config as dotenvConfig } from 'dotenv';
 import { SuiBlockchainService } from './services/sui-blockchain';
 import { IdolCreateRequest, Env, NETWORKS, SuiNetwork } from './types';
+import { Buffer } from 'buffer';
 
-// Load environment variables from .env file
 dotenvConfig();
 const app = express();
 app.use(express.json());
-app.use(cors()); // Enable CORS for all origins for now
+app.use(cors());
 
 function parseNetwork(v: string | undefined): SuiNetwork {
     return (NETWORKS as readonly string[]).includes(v ?? '')
@@ -33,11 +33,10 @@ const env: Env = {
     IAO_ADMIN_CAP_ID: process.env.IAO_ADMIN_CAP_ID!,
 };
 
-// Corrected: Validate required environment variables
 const requiredEnv = [
     'SUI_SIGNER_SECRET_KEY', 'IAO_CONFIG_ID', 'IAO_REGISTRY_ID',
     'POOLS_CONFIG_ID', 'POOLS_REGISTRY_ID', 'CLOCK_ID', 'FACTORY_PACKAGE_ID',
-    'IAO_ADMIN_CAP_ID' // ADDED to the required list
+    'IAO_ADMIN_CAP_ID'
 ];
 for (const key of requiredEnv) {
     if (!env[key as keyof Env]) {
@@ -48,13 +47,10 @@ for (const key of requiredEnv) {
 
 const suiBlockchainService = new SuiBlockchainService(env);
 
-// Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'SUI Blockchain Service is running' });
 });
 
-// Read-only: get marginal price from bonding curve for a given idol coin type
-// Usage: GET /marginal-price?coinType=<PACKAGE::module::STRUCT>
 app.get('/marginal-price', async (req, res) => {
     try {
         const coinType = (req.query.coinType as string) || '';
@@ -66,8 +62,6 @@ app.get('/marginal-price', async (req, res) => {
     }
 });
 
-// Read-only: get current supply from bonding curve for a given idol coin type
-// Usage: GET /current-supply?coinType=<PACKAGE::module::STRUCT>
 app.get('/current-supply', async (req, res) => {
     try {
         const coinType = (req.query.coinType as string) || '';
@@ -79,7 +73,6 @@ app.get('/current-supply', async (req, res) => {
     }
 });
 
-// Endpoint to launch an IDOL on-chain
 app.post('/launch-idol', async (req, res) => {
     const { idolId, createParams } = req.body as { idolId: number; createParams: IdolCreateRequest };
 
@@ -87,14 +80,12 @@ app.post('/launch-idol', async (req, res) => {
         return res.status(400).json({ error: 'Missing idolId or createParams in request body.' });
     }
 
-    // --- ENHANCED LOGGING ---
     console.log("======================================================");
     console.log(`[DO Droplet] Received request to launch idol ID: ${idolId}`);
     console.log(`[DO Droplet] Ticker: ${createParams.ticker}, Name: ${createParams.name}`);
     console.log("------------------------------------------------------");
 
     try {
-        // Step 1: Publish Token Package
         console.log(`[DO Droplet] STEP 1: Publishing token package for idol ID: ${idolId}...`);
         const tokenPackageResult = await suiBlockchainService.publishIdolTokenPackage({
             ticker: createParams.ticker,
@@ -105,7 +96,6 @@ app.post('/launch-idol', async (req, res) => {
         });
         console.log(`[DO Droplet] SUCCESS: Token package published for idol ID: ${idolId}. Package ID: ${tokenPackageResult.packageId}`);
 
-        // Step 2: Register Asset with IAO Protocol via Factory
         console.log(`[DO Droplet] STEP 2: Registering asset with IAO protocol for idol ID: ${idolId}...`);
         const registerAssetResult = await suiBlockchainService.registerAsset(
             {
@@ -128,7 +118,7 @@ app.post('/launch-idol', async (req, res) => {
             structName: tokenPackageResult.structName,
             coinType: tokenPackageResult.coinType,
             poolId: registerAssetResult.poolId,
-            bondingCurveId: registerAssetResult.bondingCurveId, // Added bondingCurveId to the response
+            bondingCurveId: registerAssetResult.bondingCurveId,
             digest: registerAssetResult.digest,
             lpCapId: registerAssetResult.lpCapId,
             creatorTokensId: registerAssetResult.creatorTokensId,
@@ -144,9 +134,7 @@ app.post('/launch-idol', async (req, res) => {
     }
 });
 
-// API endpoint to graduate an idol pool
 app.post('/graduate-idol', async (req, res) => {
-    // These IDs must be provided by the client
     const { idolCoinType, bondingCurveId, poolId, quoteCoinType } = req.body;
 
     if (!idolCoinType || !bondingCurveId || !poolId) {
@@ -178,7 +166,6 @@ app.post('/graduate-idol', async (req, res) => {
     }
 });
 
-// API endpoint to call check_and_update_level
 app.post('/check-update-level', async (req, res) => {
     const { idolCoinType } = req.body;
 
@@ -196,11 +183,10 @@ app.post('/check-update-level', async (req, res) => {
         console.log(`[DO Droplet] SUCCESS: check_and_update_level executed. Transaction digest: ${result.digest}`);
         console.log("======================================================");
         
-        // 🔥 MODIFICATION: Return the digest AND the events array
         res.status(200).json({
             message: 'Successfully executed check_and_update_level.',
             digest: result.digest,
-            events: result.events, // <--- ADDED EVENTS HERE
+            events: result.events,
         });
     } catch (error: any) {
         console.error(`[DO Droplet] FATAL ERROR during check_and_update_level:`, error);
@@ -212,7 +198,6 @@ app.post('/check-update-level', async (req, res) => {
     }
 });
 
-// API endpoint to get trade volume for a specific bonding curve or all curves
 app.get('/volume', async (req, res) => {
     const { bondingCurveId, limit } = req.query;
 
@@ -224,13 +209,11 @@ app.get('/volume', async (req, res) => {
     console.log("------------------------------------------------------");
 
     try {
-        // Fetch events using the service method
         const events = await suiBlockchainService.getTradeEvents(
             bondingCurveId as string | undefined,
             limit ? parseInt(limit as string, 10) : 100
         );
         
-        // Calculate volume from the fetched events
         const volumeData = suiBlockchainService.calculateVolume(events);
         
         console.log(`[DO Droplet] SUCCESS: Volume calculation complete. Transactions found: ${volumeData.transactionCount}`);
@@ -251,7 +234,6 @@ app.get('/volume', async (req, res) => {
     }
 });
 
-// API endpoint to get token holders for a specific bonding curve or all curves
 app.get('/holders', async (req, res) => {
     const { bondingCurveId, limit } = req.query;
 
@@ -263,13 +245,11 @@ app.get('/holders', async (req, res) => {
     console.log("------------------------------------------------------");
 
     try {
-        // Fetch events using the service method
         const events = await suiBlockchainService.getTradeEvents(
             bondingCurveId as string | undefined,
-            limit ? parseInt(limit as string, 10) : 1000 // A higher limit might be needed for holders
+            limit ? parseInt(limit as string, 10) : 1000
         );
         
-        // Calculate holders from the fetched events
         const holdersData = suiBlockchainService.calculateHolders(events);
         
         console.log(`[DO Droplet] SUCCESS: Holder calculation complete. Holders found: ${Object.keys(holdersData).length}`);
@@ -291,7 +271,6 @@ app.get('/holders', async (req, res) => {
     }
 });
 
-// API endpoint to get combined volume and holder stats for a specific bonding curve
 app.get('/holders-volume', async (req, res) => {
     const { bondingCurveId, limit } = req.query;
 
@@ -304,22 +283,18 @@ app.get('/holders-volume', async (req, res) => {
     console.log("------------------------------------------------------");
 
     try {
-        // 1. Fetch events once
         const events = await suiBlockchainService.getTradeEvents(
             bondingCurveId as string,
-            limit ? parseInt(limit as string, 10) : 1000 // Use a higher limit for accuracy
+            limit ? parseInt(limit as string, 10) : 1000
         );
         
-        // 2. Calculate volume
         const volumeData = suiBlockchainService.calculateVolume(events);
         
-        // 3. Calculate holders
         const holdersData = suiBlockchainService.calculateHolders(events);
         
         console.log(`[DO Droplet] SUCCESS: Stats calculation complete. Transactions: ${volumeData.transactionCount}, Holders: ${Object.keys(holdersData).length}`);
         console.log("======================================================");
 
-        // 4. Combine and send the response
         res.status(200).json({
             bondingCurveId,
             volume: volumeData,
@@ -336,6 +311,45 @@ app.get('/holders-volume', async (req, res) => {
             error: 'Failed to fetch and calculate stats for the bonding curve',
             details: error.message,
         });
+    }
+});
+
+
+app.get('/getcurveliquidityreserve', async (req, res) => {
+    try {
+        const coinType = (req.query.coinType as string) || '';
+        if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
+        
+        const { rawReturn } = await suiBlockchainService.getCurveLiquidityReserveForIdol(coinType);
+
+        const rawBytes = rawReturn[0][0];
+        
+        const buffer = Buffer.from(rawBytes);
+        const rawLiquidityMist = buffer.readBigUInt64LE(0);
+
+        const MIST_PER_SUI = 1_000_000_000n;
+        const humanReadableLiquidity = Number(rawLiquidityMist) / Number(MIST_PER_SUI);
+
+        res.status(200).json({
+            coinType,
+            liquidity_sui: humanReadableLiquidity,
+            rawReturn: rawReturn
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message || String(e) });
+    }
+});
+
+// Read-only: get curve state for a given idol coin type
+// Usage: GET /curve-state?coinType=<PACKAGE::module::STRUCT>
+app.get('/curve-state', async (req, res) => {
+    try {
+        const coinType = (req.query.coinType as string) || '';
+        if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
+        const { state } = await suiBlockchainService.getCurveStateForIdol(coinType);
+        res.status(200).json({ coinType, state });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message || String(e) });
     }
 });
 
