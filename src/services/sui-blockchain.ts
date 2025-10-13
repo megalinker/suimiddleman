@@ -475,21 +475,23 @@ export class SuiBlockchainService {
     
             // 2. Get the circulating supply
             const { supply: supplyString } = await this.getCurrentSupplyForIdol(coinType);
-            const circulatingSupply = parseFloat(supplyString);
+            const circulatingSupplyRaw = parseFloat(supplyString);
+            
+            // The circulating supply of the IDOL token also has decimals.
+            const circulatingSupply = circulatingSupplyRaw / SUI_DECIMALS_FACTOR;
     
             // 3. Calculate market cap in SUI
-            // Note: The supply is a whole number (doesn't have decimals like SUI)
             const marketCapInSui = priceInSui * circulatingSupply;
     
             return { 
               coinType, 
               price: priceInSui.toFixed(9), 
-              circulatingSupply: circulatingSupply.toString(), 
+              circulatingSupply: circulatingSupply.toFixed(9), 
               marketCap: marketCapInSui.toFixed(9)
-            } as IdolMarketCapResult;
+            };
           } catch (err: any) {
             const message = err?.message || 'Failed to compute market cap';
-            return { coinType, error: message } as IdolMarketCapResult;
+            return { coinType, error: message };
           }
         });
     
