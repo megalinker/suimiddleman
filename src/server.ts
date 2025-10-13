@@ -55,8 +55,8 @@ app.get('/marginal-price', async (req, res) => {
     try {
         const coinType = (req.query.coinType as string) || '';
         if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
-        const { rawReturn } = await suiBlockchainService.getMarginalPriceForIdol(coinType);
-        res.status(200).json({ coinType, rawReturn });
+        const { price } = await suiBlockchainService.getMarginalPriceForIdol(coinType);
+        res.status(200).json({ coinType, price });
     } catch (e: any) {
         res.status(500).json({ error: e.message || String(e) });
     }
@@ -66,8 +66,8 @@ app.get('/current-supply', async (req, res) => {
     try {
         const coinType = (req.query.coinType as string) || '';
         if (!coinType) return res.status(400).json({ error: 'Missing coinType query param' });
-        const { rawReturn } = await suiBlockchainService.getCurrentSupplyForIdol(coinType);
-        res.status(200).json({ coinType, rawReturn });
+        const { supply } = await suiBlockchainService.getCurrentSupplyForIdol(coinType);
+        res.status(200).json({ coinType, supply });
     } catch (e: any) {
         res.status(500).json({ error: e.message || String(e) });
     }
@@ -350,6 +350,27 @@ app.get('/curve-state', async (req, res) => {
         res.status(200).json({ coinType, state });
     } catch (e: any) {
         res.status(500).json({ error: e.message || String(e) });
+    }
+});
+
+// Read-only: get market caps for a batch of idol coin types
+// Usage: GET /market-caps?coinType=<ID1>&coinType=<ID2>
+// Or:    GET /market-caps?coinTypes=<ID1>,<ID2>
+app.get('/market-caps', async (req, res) => {
+    try {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const repeated = url.searchParams.getAll('coinType').filter(Boolean);
+        const csv = (url.searchParams.get('coinTypes') || '').split(',').map(s => s.trim()).filter(Boolean);
+        const coinTypes = Array.from(new Set([ ...repeated, ...csv ]));
+
+        if (coinTypes.length === 0) {
+            return res.status(400).json({ error: 'Missing coinType(s) in query parameters.' });
+        }
+        
+        const results = await suiBlockchainService.computeMarketCaps(coinTypes);
+        res.status(200).json({ results });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message || 'Failed to compute market caps' });
     }
 });
 

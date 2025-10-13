@@ -5,7 +5,7 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 import { fromB64 } from '@mysten/sui/utils';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Env, IdolCreateRequest, CheckUpdateLevelResult, TradeEventData } from '../types'; 
+import { Env, IdolCreateRequest, CheckUpdateLevelResult, TradeEventData, IdolMarketCapResult } from '../types'; 
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -461,12 +461,48 @@ export class SuiBlockchainService {
     }
 
     /**
+     * Computes the market capitalization for a batch of idol coin types.
+     * Price and Market Cap are denominated in SUI.
+     */
+    async computeMarketCaps(coinTypes: string[]): Promise<IdolMarketCapResult[]> {
+        const SUI_DECIMALS_FACTOR = 1_000_000_000; // 10^9
+    
+        const tasks = coinTypes.map(async (coinType) => {
+          try {
+            // 1. Get the marginal price in SUI
+            const { price: priceString } = await this.getMarginalPriceForIdol(coinType);
+            const priceInSui = parseFloat(priceString) / SUI_DECIMALS_FACTOR;
+    
+            // 2. Get the circulating supply
+            const { supply: supplyString } = await this.getCurrentSupplyForIdol(coinType);
+            const circulatingSupply = parseFloat(supplyString);
+    
+            // 3. Calculate market cap in SUI
+            // Note: The supply is a whole number (doesn't have decimals like SUI)
+            const marketCapInSui = priceInSui * circulatingSupply;
+    
+            return { 
+              coinType, 
+              price: priceInSui.toFixed(9), 
+              circulatingSupply: circulatingSupply.toString(), 
+              marketCap: marketCapInSui.toFixed(9)
+            } as IdolMarketCapResult;
+          } catch (err: any) {
+            const message = err?.message || 'Failed to compute market cap';
+            return { coinType, error: message } as IdolMarketCapResult;
+          }
+        });
+    
+        return Promise.all(tasks);
+    }
+
+    /**
      * Read-only price query using bonding_curve::get_marginal_price<CoinX, CoinY>(config: &GlobalConfig): u64
      * - CoinX defaults to SUI unless overridden via env COINX_TYPE
      * - CoinY is the provided idolCoinType (e.g., `${pkg}::${mod}::${STRUCT}`)
      * - config object is BONDING_CURVE_GLOBAL_CONFIG_ID
      */
-    async getMarginalPriceForIdol(idolCoinType: string): Promise<{ rawReturn?: any }> {
+    async getMarginalPriceForIdol(idolCoinType: string): Promise<{ price: string }> {
         const pkg = this.poolsPackageId;
         if (!pkg) throw new Error('No package ID configured for get_marginal_price');
 
@@ -487,7 +523,13 @@ export class SuiBlockchainService {
             const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
             throw new Error(`No return value from get_marginal_price. ${err ? 'DevInspect error: ' + err : ''}`);
         }
-        return { rawReturn };
+        
+        // The raw return for a u64 is a little-endian byte array.
+        const bytes = rawReturn[0][0];
+        const view = new DataView(new Uint8Array(bytes).buffer);
+        const price = view.getBigUint64(0, true); // true for little-endian
+
+        return { price: price.toString() };
     }
 
     /**
@@ -497,7 +539,7 @@ export class SuiBlockchainService {
      * - config object prefers BONDING_CURVE_GLOBAL_CONFIG_ID, falls back to POOLS_CONFIG_ID
      * Returns the raw dev-inspect returnValues array so the caller can decode as needed.
      */
-    async getCurrentSupplyForIdol(idolCoinType: string): Promise<{ rawReturn?: any }> {
+    async getCurrentSupplyForIdol(idolCoinType: string): Promise<{ supply: string }> {
         const pkg = this.poolsPackageId;
         if (!pkg) throw new Error('No package ID configured for get_current_supply');
 
@@ -518,7 +560,13 @@ export class SuiBlockchainService {
             const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
             throw new Error(`No return value from get_current_supply. ${err ? 'DevInspect error: ' + err : ''}`);
         }
-        return { rawReturn };
+        
+        // The raw return for a u64 is a little-endian byte array.
+        const bytes = rawReturn[0][0];
+        const view = new DataView(new Uint8Array(bytes).buffer);
+        const supply = view.getBigUint64(0, true); // true for little-endian
+
+        return { supply: supply.toString() };
     }
 
     /**

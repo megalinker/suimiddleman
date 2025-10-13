@@ -58,3 +58,11 @@ export interface TradeEventData {
     bonding_curve_id: string;
     price: string;
 }
+
+export interface IdolMarketCapResult {
+    coinType: string;
+    price?: string;
+    circulatingSupply?: string;
+    marketCap?: string;
+    error?: string;
+}
