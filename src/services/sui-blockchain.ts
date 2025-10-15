@@ -272,6 +272,8 @@ export class SuiBlockchainService {
         await this.assertObjectExists(this.iaoRegistryId, 'IAO_REGISTRY_ID');
         await this.assertObjectExists(this.poolsConfigId, 'POOLS_CONFIG_ID');
         await this.assertObjectExists(this.poolsRegistryId, 'POOLS_REGISTRY_ID');
+        await this.assertObjectExists(this.cetusConfigId, 'CETUS_GLOBAL_CONFIG_ID');
+        await this.assertObjectExists(this.cetusPoolsId, 'CETUS_POOLS_ID');
         await this.assertObjectExists(this.clockId, 'CLOCK_ID');
 
         const tx = new Transaction();
@@ -293,6 +295,8 @@ export class SuiBlockchainService {
                 tx.object(this.iaoRegistryId),
                 tx.object(this.poolsConfigId),
                 tx.object(this.poolsRegistryId),
+                tx.object(this.cetusConfigId),
+                tx.object(this.cetusPoolsId),
                 initial_liquidity,
                 tx.object(this.clockId),
             ],
@@ -475,3 +479,4 @@ module ${moduleName}::${moduleName} {
 `.trim();
     }
 }
+
