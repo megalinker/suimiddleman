@@ -45,6 +45,8 @@ export class SuiBlockchainService {
     private bcModule?: string;
     private bcGlobalConfigId?: string;
     private quoteCoinType?: string;
+    private cetusConfigId?: string;
+    private cetusPoolsId?: string;
     private static readonly SUI_DECIMALS_FACTOR = 1_000_000_000;
     constructor(env: Env) {
         this.client = new SuiClient({ url: getFullnodeUrl(env.SUI_NETWORK) });
@@ -78,7 +80,9 @@ export class SuiBlockchainService {
             !env.POOLS_REGISTRY_ID ||
             !env.CLOCK_ID ||
             !env.FACTORY_PACKAGE_ID ||
-            !env.IAO_ADMIN_CAP_ID
+            !env.IAO_ADMIN_CAP_ID ||
+            !env.CETUS_GLOBAL_CONFIG_ID ||
+            !env.CETUS_POOLS_ID
         ) {
             throw new Error('Missing one or more IAO/Pools/Factory object IDs in environment variables.');
         }
@@ -93,6 +97,8 @@ export class SuiBlockchainService {
         this.bcModule = env.BONDING_CURVE_MODULE || 'bonding_curve';
         this.bcGlobalConfigId = env.BONDING_CURVE_GLOBAL_CONFIG_ID;
         this.quoteCoinType = env.COINX_TYPE || '0x2::sui::SUI';
+        this.cetusConfigId = env.CETUS_GLOBAL_CONFIG_ID;
+        this.cetusPoolsId = env.CETUS_POOLS_ID;
     }
 
     private async ensureSuiAvailable() {
@@ -280,6 +286,8 @@ export class SuiBlockchainService {
                 tx.object(this.iaoRegistryId),
                 tx.object(this.poolsConfigId),
                 tx.object(this.poolsRegistryId),
+                tx.object(this.cetusConfigId),
+                tx.object(this.cetusPoolsId),
                 initial_liquidity,
                 tx.object(this.clockId),
             ],
@@ -817,4 +825,5 @@ module ${moduleName}::${moduleName} {
             default: return 'Unknown';
         }
     }
+
 }
