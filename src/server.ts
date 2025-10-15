@@ -30,12 +30,14 @@ const env: Env = {
     FACTORY_PACKAGE_ID: process.env.FACTORY_PACKAGE_ID!,
     PORT: process.env.PORT ?? '3000',
     SUI_NETWORK: parseNetwork(process.env.SUI_NETWORK),
+    CETUS_GLOBAL_CONFIG_ID: process.env.CETUS_GLOBAL_CONFIG_ID!,
+    CETUS_POOLS_ID: process.env.CETUS_POOLS_ID!
 };
 
 // Validate required environment variables
 const requiredEnv = [
     'SUI_SIGNER_SECRET_KEY', 'IAO_CONFIG_ID', 'IAO_REGISTRY_ID',
-    'POOLS_CONFIG_ID', 'POOLS_REGISTRY_ID', 'CLOCK_ID', 'FACTORY_PACKAGE_ID'
+    'POOLS_CONFIG_ID', 'POOLS_REGISTRY_ID', 'CLOCK_ID', 'FACTORY_PACKAGE_ID', 'CETUS_GLOBAL_CONFIG_ID', 'CETUS_POOLS_ID'
 ];
 for (const key of requiredEnv) {
     if (!env[key as keyof Env]) {
