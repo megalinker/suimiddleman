@@ -12,7 +12,8 @@ export interface Env {
     PORT: string;
     SUI_NETWORK: SuiNetwork;
     // --- REQUIRED ADMIN CAP ---
-    IAO_ADMIN_CAP_ID: string; 
+    IAO_ADMIN_CAP_ID: string;
+    POOLS_ADMIN_CAP_ID: string; 
     // --- Optional: bonding curve query wiring ---
     POOLS_PACKAGE_ID?: string; // package that contains bonding_curve::get_marginal_price
     BONDING_CURVE_MODULE?: string; // defaults to "bonding_curve"

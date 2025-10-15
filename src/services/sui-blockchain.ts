@@ -47,6 +47,7 @@ export class SuiBlockchainService {
     private quoteCoinType?: string;
     private cetusConfigId?: string;
     private cetusPoolsId?: string;
+    private poolsAdminCapId?: string;
     private static readonly SUI_DECIMALS_FACTOR = 1_000_000_000;
     constructor(env: Env) {
         this.client = new SuiClient({ url: getFullnodeUrl(env.SUI_NETWORK) });
@@ -93,6 +94,7 @@ export class SuiBlockchainService {
         this.clockId = env.CLOCK_ID;
         this.factoryPackageId = env.FACTORY_PACKAGE_ID;
         this.adminCapId = env.IAO_ADMIN_CAP_ID;
+        this.poolsAdminCapId = env.POOLS_ADMIN_CAP_ID;
         this.poolsPackageId = env.POOLS_PACKAGE_ID;
         this.bcModule = env.BONDING_CURVE_MODULE || 'bonding_curve';
         this.bcGlobalConfigId = env.BONDING_CURVE_GLOBAL_CONFIG_ID;
@@ -592,6 +594,9 @@ export class SuiBlockchainService {
         if (!this.poolsPackageId) {
             throw new Error('POOLS_PACKAGE_ID is not configured.');
         }
+        if (!this.poolsAdminCapId) {
+            throw new Error('POOLS_ADMIN_CAP_ID is not configured for graduating idols.');
+        }
         if (!this.poolsRegistryId) {
             throw new Error('POOLS_REGISTRY_ID is not configured.');
         }
@@ -604,7 +609,7 @@ export class SuiBlockchainService {
             target: `${this.poolsPackageId}::registry::graduate_admin`,
             typeArguments: [quoteCoinType, idolCoinType],
             arguments: [
-                tx.object(this.adminCapId),
+                tx.object(this.poolsAdminCapId),
                 tx.object(this.poolsRegistryId),
                 tx.pure.id(bondingCurveId),
                 tx.pure.id(poolId),

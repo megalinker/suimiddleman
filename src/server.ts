@@ -33,6 +33,7 @@ const env: Env = {
     IAO_ADMIN_CAP_ID: process.env.IAO_ADMIN_CAP_ID!,
     CETUS_GLOBAL_CONFIG_ID: process.env.CETUS_GLOBAL_CONFIG_ID!,
     CETUS_POOLS_ID: process.env.CETUS_POOLS_ID!,
+    POOLS_ADMIN_CAP_ID: process.env.POOLS_ADMIN_CAP_ID!,
 };
 
 const requiredEnv = [
