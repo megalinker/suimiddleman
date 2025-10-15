@@ -16,6 +16,8 @@ export interface Env {
     BONDING_CURVE_MODULE?: string; // defaults to "bonding_curve"
     BONDING_CURVE_GLOBAL_CONFIG_ID?: string; // GlobalConfig object passed to get_marginal_price
     COINX_TYPE?: string; // Quote coin type for price, defaults to 0x2::sui::SUI
+    CETUS_GLOBAL_CONFIG_ID?: string;
+    CETUS_POOLS_ID?: string;
 }
 
 export interface IdolCreateRequest {
@@ -34,4 +36,5 @@ export interface IdolCreateRequest {
     launchDate: string;
     launchTime: string;
     countdownMinutes: number;
+
 }
