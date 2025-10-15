@@ -31,6 +31,8 @@ const env: Env = {
     PORT: process.env.PORT ?? '3000',
     SUI_NETWORK: parseNetwork(process.env.SUI_NETWORK),
     IAO_ADMIN_CAP_ID: process.env.IAO_ADMIN_CAP_ID!,
+    CETUS_GLOBAL_CONFIG_ID: process.env.CETUS_GLOBAL_CONFIG_ID!,
+    CETUS_POOLS_ID: process.env.CETUS_POOLS_ID!,
 };
 
 const requiredEnv = [
