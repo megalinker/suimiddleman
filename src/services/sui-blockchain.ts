@@ -42,6 +42,8 @@ export class SuiBlockchainService {
     private poolsRegistryId: string;
     private clockId: string;
     private factoryPackageId: string;
+    private cetusConfigId: string;
+    private cetusPoolsId: string;
     // Optional bonding-curve query wiring
     private poolsPackageId?: string;
     private bcModule?: string;
@@ -475,3 +477,4 @@ module ${moduleName}::${moduleName} {
 `.trim();
     }
 }
+
