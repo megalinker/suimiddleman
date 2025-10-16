@@ -34,12 +34,14 @@ const env: Env = {
     CETUS_GLOBAL_CONFIG_ID: process.env.CETUS_GLOBAL_CONFIG_ID!,
     CETUS_POOLS_ID: process.env.CETUS_POOLS_ID!,
     POOLS_ADMIN_CAP_ID: process.env.POOLS_ADMIN_CAP_ID!,
+    CETUS_BURN_MANAGER_ID: process.env.CETUS_BURN_MANAGER_ID!,
+    SUI_METADATA_ID: process.env.SUI_METADATA_ID!,
 };
 
 const requiredEnv = [
     'SUI_SIGNER_SECRET_KEY', 'IAO_CONFIG_ID', 'IAO_REGISTRY_ID',
     'POOLS_CONFIG_ID', 'POOLS_REGISTRY_ID', 'CLOCK_ID', 'FACTORY_PACKAGE_ID', 'CETUS_GLOBAL_CONFIG_ID', 'CETUS_POOLS_ID',
-    'IAO_ADMIN_CAP_ID'
+    'IAO_ADMIN_CAP_ID', 'POOLS_ADMIN_CAP_ID', 'CETUS_BURN_MANAGER_ID', 'SUI_METADATA_ID'
 ];
 for (const key of requiredEnv) {
     if (!env[key as keyof Env]) {
@@ -138,32 +140,31 @@ app.post('/launch-idol', async (req, res) => {
 });
 
 app.post('/graduate-idol', async (req, res) => {
-    const { idolCoinType, bondingCurveId, poolId, quoteCoinType } = req.body;
+    const { idolCoinType, idolCoinMetadataId } = req.body as { idolCoinType?: string; idolCoinMetadataId?: string };
 
-    if (!idolCoinType || !bondingCurveId || !poolId) {
-        return res.status(400).json({ error: 'Missing idolCoinType, bondingCurveId, or poolId in request body.' });
+    if (!idolCoinType || !idolCoinMetadataId) {
+        return res.status(400).json({ error: 'Missing idolCoinType or idolCoinMetadataId in request body.' });
     }
 
     console.log("======================================================");
-    console.log(`[DO Droplet] Received request to graduate idol pool with coin type: ${idolCoinType}`);
-    console.log(`[DO Droplet] Bonding Curve ID: ${bondingCurveId}, Pool ID: ${poolId}`);
+    console.log(`[DO Droplet] Received request to graduate idol: ${idolCoinType}`);
     console.log("------------------------------------------------------");
 
     try {
-        const result = await suiBlockchainService.graduateIdolPool(idolCoinType, bondingCurveId, poolId, quoteCoinType);
+        const result = await suiBlockchainService.graduateIdol(idolCoinType, idolCoinMetadataId);
         
-        console.log(`[DO Droplet] SUCCESS: Idol pool graduated. Transaction digest: ${result.digest}`);
+        console.log(`[DO Droplet] SUCCESS: Idol graduated. Digest: ${result.digest}`);
         console.log("======================================================");
         
         res.status(200).json({
-            message: 'Idol pool successfully graduated.',
+            message: 'Idol successfully graduated into a Cetus CLMM pool.',
             digest: result.digest,
         });
     } catch (error: any) {
-        console.error(`[DO Droplet] FATAL ERROR graduating idol pool:`, error);
+        console.error(`[DO Droplet] FATAL ERROR graduating idol:`, error);
         console.log("======================================================");
         res.status(500).json({
-            error: 'Failed to graduate idol pool on SUI blockchain',
+            error: 'Failed to graduate idol on SUI blockchain',
             details: error.message,
         });
     }

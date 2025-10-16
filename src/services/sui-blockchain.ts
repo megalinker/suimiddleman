@@ -42,12 +42,14 @@ export class SuiBlockchainService {
     private factoryPackageId: string;
     private adminCapId: string;
     private poolsPackageId?: string;
-    private bcModule?: string;
+    private bcModule: string;
     private bcGlobalConfigId?: string;
-    private quoteCoinType?: string;
-    private cetusConfigId?: string;
-    private cetusPoolsId?: string;
-    private poolsAdminCapId?: string;
+    private quoteCoinType: string;
+    private cetusConfigId: string;
+    private cetusPoolsId: string;
+    private poolsAdminCapId: string;
+    private cetusBurnManagerId: string;
+    private suiMetadataId: string;
     private static readonly SUI_DECIMALS_FACTOR = 1_000_000_000;
     constructor(env: Env) {
         this.client = new SuiClient({ url: getFullnodeUrl(env.SUI_NETWORK) });
@@ -83,7 +85,10 @@ export class SuiBlockchainService {
             !env.FACTORY_PACKAGE_ID ||
             !env.IAO_ADMIN_CAP_ID ||
             !env.CETUS_GLOBAL_CONFIG_ID ||
-            !env.CETUS_POOLS_ID
+            !env.CETUS_POOLS_ID ||
+            !env.POOLS_ADMIN_CAP_ID ||
+            !env.CETUS_BURN_MANAGER_ID ||
+            !env.SUI_METADATA_ID
         ) {
             throw new Error('Missing one or more IAO/Pools/Factory object IDs in environment variables.');
         }
@@ -99,8 +104,10 @@ export class SuiBlockchainService {
         this.bcModule = env.BONDING_CURVE_MODULE || 'bonding_curve';
         this.bcGlobalConfigId = env.BONDING_CURVE_GLOBAL_CONFIG_ID;
         this.quoteCoinType = env.COINX_TYPE || '0x2::sui::SUI';
-        this.cetusConfigId = env.CETUS_GLOBAL_CONFIG_ID;
-        this.cetusPoolsId = env.CETUS_POOLS_ID;
+        this.cetusConfigId = env.CETUS_GLOBAL_CONFIG_ID!;
+        this.cetusPoolsId = env.CETUS_POOLS_ID!;
+        this.cetusBurnManagerId = env.CETUS_BURN_MANAGER_ID;
+        this.suiMetadataId = env.SUI_METADATA_ID;
     }
 
     private async ensureSuiAvailable() {
@@ -594,9 +601,7 @@ export class SuiBlockchainService {
         if (!this.poolsPackageId) {
             throw new Error('POOLS_PACKAGE_ID is not configured.');
         }
-        if (!this.poolsAdminCapId) {
-            throw new Error('POOLS_ADMIN_CAP_ID is not configured for graduating idols.');
-        }
+        // poolsAdminCapId now required and validated in constructor
         if (!this.poolsRegistryId) {
             throw new Error('POOLS_REGISTRY_ID is not configured.');
         }
@@ -634,6 +639,89 @@ export class SuiBlockchainService {
         return {
             digest: result.digest,
         };
+    }
+
+    /**
+     * Graduates an IAO using bonding_curve::graduate, creating a Cetus CLMM pool.
+     * This method:
+     * 1) Adds a completion level that always triggers,
+     * 2) Calls check_and_update_level to transition to Completed,
+     * 3) Calls graduate with required Cetus objects and coin metadata.
+     */
+    async graduateIdol(
+        idolCoinType: string,
+        idolCoinMetadataId: string,
+    ): Promise<{ digest: string }> {
+        if (!this.poolsPackageId) {
+            throw new Error('POOLS_PACKAGE_ID is not configured.');
+        }
+
+        const tx = new Transaction();
+
+        // Step 1: set a completion level (supply > 0)
+        const levelManager = tx.moveCall({
+            target: `${this.poolsPackageId}::config::borrow_mut_default_level_manager`,
+            typeArguments: [this.quoteCoinType!],
+            arguments: [
+                tx.object(this.poolsAdminCapId),
+                tx.object(this.poolsConfigId),
+            ],
+        });
+
+        const triggerMetric = tx.moveCall({
+            target: `${this.poolsPackageId}::level::create_trigger_metric_supply`,
+        });
+
+        tx.moveCall({
+            target: `${this.poolsPackageId}::level::insert`,
+            arguments: [
+                levelManager,
+                tx.pure.u64(1), // trigger when supply > 0
+                triggerMetric,
+                tx.pure.vector('string', []),
+                tx.pure.vector('string', []),
+                tx.object(this.clockId),
+            ],
+        });
+
+        // Step 2: trigger the level so curve becomes Completed
+        tx.moveCall({
+            target: `${this.poolsPackageId}::${this.bcModule}::check_and_update_level`,
+            typeArguments: [this.quoteCoinType!, idolCoinType],
+            arguments: [
+                tx.object(this.poolsConfigId),
+                tx.object(this.clockId),
+            ],
+        });
+
+        // Step 3: call graduate
+        tx.moveCall({
+            target: `${this.poolsPackageId}::${this.bcModule}::graduate`,
+            typeArguments: [this.quoteCoinType!, idolCoinType],
+            arguments: [
+                tx.object(this.poolsConfigId),
+                tx.object(this.poolsRegistryId),
+                tx.object(this.cetusConfigId),
+                tx.object(this.cetusPoolsId),
+                tx.object(this.cetusBurnManagerId),
+                tx.object(this.suiMetadataId),
+                tx.object(idolCoinMetadataId),
+                tx.object(this.clockId),
+            ],
+        });
+
+        tx.setGasBudget(500_000_000n);
+
+        const result = await this.client.signAndExecuteTransaction({
+            signer: this.keypair,
+            transaction: tx,
+            requestType: 'WaitForLocalExecution',
+            options: { showEffects: true },
+        });
+
+        await this.client.waitForTransaction({ digest: result.digest });
+
+        return { digest: result.digest };
     }
 
     /**

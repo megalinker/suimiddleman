@@ -21,6 +21,8 @@ export interface Env {
     COINX_TYPE?: string; // Quote coin type for price, defaults to 0x2::sui::SUI
     CETUS_GLOBAL_CONFIG_ID?: string;
     CETUS_POOLS_ID?: string;
+    CETUS_BURN_MANAGER_ID: string; // Add this
+    SUI_METADATA_ID: string; // Add this
 }
 
 export interface IdolCreateRequest {
