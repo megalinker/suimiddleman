@@ -5,7 +5,7 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 import { fromB64 } from '@mysten/sui/utils';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Env, IdolCreateRequest, CheckUpdateLevelResult, TradeEventData, IdolMarketCapResult } from '../types'; 
+import { Env, IdolCreateRequest, CheckUpdateLevelResult, TradeEventData, IdolMarketCapResult } from '../types';
 import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -50,6 +50,7 @@ export class SuiBlockchainService {
     private poolsAdminCapId: string;
     private cetusBurnManagerId: string;
     private suiMetadataId: string;
+    private graduatorPackageId?: string;
     private static readonly SUI_DECIMALS_FACTOR = 1_000_000_000;
     constructor(env: Env) {
         this.client = new SuiClient({ url: getFullnodeUrl(env.SUI_NETWORK) });
@@ -108,6 +109,7 @@ export class SuiBlockchainService {
         this.cetusPoolsId = env.CETUS_POOLS_ID!;
         this.cetusBurnManagerId = env.CETUS_BURN_MANAGER_ID;
         this.suiMetadataId = env.SUI_METADATA_ID;
+        this.graduatorPackageId = env.GRADUATOR_PACKAGE_ID;
     }
 
     private async ensureSuiAvailable() {
@@ -384,11 +386,11 @@ export class SuiBlockchainService {
                 order: 'descending'
             });
 
-            const filteredEvents = bondingCurveId 
+            const filteredEvents = bondingCurveId
                 ? events.data.filter(event => {
                     const data = event.parsedJson as TradeEventData;
                     return data.bonding_curve_id === bondingCurveId;
-                  })
+                })
                 : events.data;
 
             return filteredEvents;
@@ -398,11 +400,11 @@ export class SuiBlockchainService {
         }
     }
 
-/**
-     * Calculates trading volume from a list of events.
-     * @param events - An array of trade events.
-     * @returns An object containing total, buy, and sell volumes (in SUI), and the transaction count.
-     */
+    /**
+         * Calculates trading volume from a list of events.
+         * @param events - An array of trade events.
+         * @returns An object containing total, buy, and sell volumes (in SUI), and the transaction count.
+         */
     calculateVolume(events: any[]): {
         totalVolume: number;
         buyVolume: number;
@@ -419,9 +421,9 @@ export class SuiBlockchainService {
         events.forEach(event => {
             const data = event.parsedJson as TradeEventData;
             console.log(`[Volume Calculation] Processing event: is_buy=${data.is_buy}, x_amount=${data.x_amount}, y_amount=${data.y_amount}`);
-            
+
             const rawAmountBigInt = BigInt(data.x_amount);
-            
+
             const humanVolume = Number(rawAmountBigInt) / decimalsFactor;
 
             if (data.is_buy) {
@@ -483,35 +485,35 @@ export class SuiBlockchainService {
      */
     async computeMarketCaps(coinTypes: string[]): Promise<IdolMarketCapResult[]> {
         const SUI_DECIMALS_FACTOR = 1_000_000_000; // 10^9
-    
+
         const tasks = coinTypes.map(async (coinType) => {
-          try {
-            // 1. Get the marginal price in SUI
-            const { price: priceString } = await this.getMarginalPriceForIdol(coinType);
-            const priceInSui = parseFloat(priceString) / SUI_DECIMALS_FACTOR;
-    
-            // 2. Get the circulating supply
-            const { supply: supplyString } = await this.getCurrentSupplyForIdol(coinType);
-            const circulatingSupplyRaw = parseFloat(supplyString);
-            
-            // The circulating supply of the IDOL token also has decimals.
-            const circulatingSupply = circulatingSupplyRaw / SUI_DECIMALS_FACTOR;
-    
-            // 3. Calculate market cap in SUI
-            const marketCapInSui = priceInSui * circulatingSupply;
-    
-            return { 
-              coinType, 
-              price: priceInSui.toFixed(9), 
-              circulatingSupply: circulatingSupply.toFixed(9), 
-              marketCap: marketCapInSui.toFixed(9)
-            };
-          } catch (err: any) {
-            const message = err?.message || 'Failed to compute market cap';
-            return { coinType, error: message };
-          }
+            try {
+                // 1. Get the marginal price in SUI
+                const { price: priceString } = await this.getMarginalPriceForIdol(coinType);
+                const priceInSui = parseFloat(priceString) / SUI_DECIMALS_FACTOR;
+
+                // 2. Get the circulating supply
+                const { supply: supplyString } = await this.getCurrentSupplyForIdol(coinType);
+                const circulatingSupplyRaw = parseFloat(supplyString);
+
+                // The circulating supply of the IDOL token also has decimals.
+                const circulatingSupply = circulatingSupplyRaw / SUI_DECIMALS_FACTOR;
+
+                // 3. Calculate market cap in SUI
+                const marketCapInSui = priceInSui * circulatingSupply;
+
+                return {
+                    coinType,
+                    price: priceInSui.toFixed(9),
+                    circulatingSupply: circulatingSupply.toFixed(9),
+                    marketCap: marketCapInSui.toFixed(9)
+                };
+            } catch (err: any) {
+                const message = err?.message || 'Failed to compute market cap';
+                return { coinType, error: message };
+            }
         });
-    
+
         return Promise.all(tasks);
     }
 
@@ -542,7 +544,7 @@ export class SuiBlockchainService {
             const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
             throw new Error(`No return value from get_marginal_price. ${err ? 'DevInspect error: ' + err : ''}`);
         }
-        
+
         // The raw return for a u64 is a little-endian byte array.
         const bytes = rawReturn[0][0];
         const view = new DataView(new Uint8Array(bytes).buffer);
@@ -579,7 +581,7 @@ export class SuiBlockchainService {
             const err = (di as any)?.effects?.status?.error ?? (di as any)?.error;
             throw new Error(`No return value from get_current_supply. ${err ? 'DevInspect error: ' + err : ''}`);
         }
-        
+
         // The raw return for a u64 is a little-endian byte array.
         const bytes = rawReturn[0][0];
         const view = new DataView(new Uint8Array(bytes).buffer);
@@ -652,61 +654,35 @@ export class SuiBlockchainService {
         idolCoinType: string,
         idolCoinMetadataId: string,
     ): Promise<{ digest: string }> {
-        if (!this.poolsPackageId) {
-            throw new Error('POOLS_PACKAGE_ID is not configured.');
+        if (!this.graduatorPackageId) {
+            throw new Error('GRADUATOR_PACKAGE_ID is not configured in the environment.');
         }
+        // All other required IDs are already checked in the constructor.
 
         const tx = new Transaction();
 
-        // Step 1: set a completion level (supply > 0)
-        const levelManager = tx.moveCall({
-            target: `${this.poolsPackageId}::config::borrow_mut_default_level_manager`,
-            typeArguments: [this.quoteCoinType!],
+        // A single, simple moveCall to our helper function.
+        // This function encapsulates all the complex, reference-passing logic.
+        tx.moveCall({
+            target: `${this.graduatorPackageId}::graduate_helper::graduate_idol`,
+            typeArguments: [this.quoteCoinType!, idolCoinType],
             arguments: [
+                // Admin Caps & System Objects
                 tx.object(this.poolsAdminCapId),
-                tx.object(this.poolsConfigId),
-            ],
-        });
-
-        const triggerMetric = tx.moveCall({
-            target: `${this.poolsPackageId}::level::create_trigger_metric_supply`,
-        });
-
-        tx.moveCall({
-            target: `${this.poolsPackageId}::level::insert`,
-            arguments: [
-                levelManager,
-                tx.pure.u64(1), // trigger when supply > 0
-                triggerMetric,
-                tx.pure.vector('string', []),
-                tx.pure.vector('string', []),
                 tx.object(this.clockId),
-            ],
-        });
 
-        // Step 2: trigger the level so curve becomes Completed
-        tx.moveCall({
-            target: `${this.poolsPackageId}::${this.bcModule}::check_and_update_level`,
-            typeArguments: [this.quoteCoinType!, idolCoinType],
-            arguments: [
-                tx.object(this.poolsConfigId),
-                tx.object(this.clockId),
-            ],
-        });
-
-        // Step 3: call graduate
-        tx.moveCall({
-            target: `${this.poolsPackageId}::${this.bcModule}::graduate`,
-            typeArguments: [this.quoteCoinType!, idolCoinType],
-            arguments: [
+                // Your Protocol's Shared Objects
                 tx.object(this.poolsConfigId),
                 tx.object(this.poolsRegistryId),
+
+                // Cetus Shared Objects
                 tx.object(this.cetusConfigId),
                 tx.object(this.cetusPoolsId),
                 tx.object(this.cetusBurnManagerId),
+
+                // Metadata Objects
                 tx.object(this.suiMetadataId),
                 tx.object(idolCoinMetadataId),
-                tx.object(this.clockId),
             ],
         });
 
@@ -772,7 +748,7 @@ export class SuiBlockchainService {
             digest: result.digest,
             options: { showEffects: true, showEvents: true },
         });
-        
+
         const events = (finalResult as any).events ?? [];
 
         return {
@@ -840,7 +816,7 @@ module ${moduleName}::${moduleName} {
         reversedEvents.forEach(event => {
             const data = event.parsedJson as TradeEventData;
             const trader = data.trader;
-            
+
             if (!balances[trader]) {
                 balances[trader] = 0;
             }
@@ -908,7 +884,7 @@ module ${moduleName}::${moduleName} {
         if (!valueBytes || valueBytes.length === 0) {
             return 'Unknown';
         }
-    
+
         const stateIndex = valueBytes[0];
         switch (stateIndex) {
             case 0: return 'Active';

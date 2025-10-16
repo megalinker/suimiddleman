@@ -23,6 +23,7 @@ export interface Env {
     CETUS_POOLS_ID?: string;
     CETUS_BURN_MANAGER_ID: string; // Add this
     SUI_METADATA_ID: string; // Add this
+    GRADUATOR_PACKAGE_ID?: string;
 }
 
 export interface IdolCreateRequest {
